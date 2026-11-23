@@ -1,0 +1,65 @@
+name: Agent — implémenter un ticket
+
+# Déclencheur : poser l'étiquette "agent:implement" sur un ticket.
+on:
+  issues:
+    types: [labeled]
+
+# Un seul agent à la fois par ticket.
+concurrency:
+  group: agent-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  implement:
+    if: github.event.label.name == 'agent:implement'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          # Abonnement Claude : `claude setup-token`, puis secret CLAUDE_CODE_OAUTH_TOKEN.
+          # Clé API à la place : anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: >-
+            --max-turns 40
+            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(npm run check),Bash(npm test),Bash(npx vitest:*),Bash(git:*),Bash(gh pr create:*),Bash(gh issue comment:*)"
+          prompt: |
+            Tu travailles seul sur le ticket #${{ github.event.issue.number }} du dépôt ${{ github.repository }}.
+            Titre : ${{ github.event.issue.title }}
+
+            Ticket :
+            ${{ github.event.issue.body }}
+
+            Procédure, dans cet ordre :
+            1. Lis CLAUDE.md et respecte toutes ses règles.
+            2. Si le ticket contient une question ouverte ou une règle métier ambiguë,
+               NE DEVINE PAS : commente le ticket avec ta question et tes options
+               (gh issue comment), puis arrête-toi sans ouvrir de PR.
+            3. Écris d'abord les tests de chaque critère d'acceptation, lance-les,
+               vérifie qu'ils échouent.
+            4. Implémente jusqu'à ce que `npm run check` passe.
+            5. Crée une branche agent/issue-${{ github.event.issue.number }},
+               commite, pousse, et ouvre une PR qui contient "Closes #${{ github.event.issue.number }}".
+            6. Dans la description de la PR, ajoute une section
+               "Ce que je n'ai pas couvert / ce dont je ne suis pas sûr".
+
+            Interdits : lire ou créer .env, modifier une migration existante,
+            modifier un test existant pour le faire passer.

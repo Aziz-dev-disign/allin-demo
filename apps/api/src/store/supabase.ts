@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { Coach, Member, Store } from "./types.js";
+import { DuplicateEmailError, type Coach, type Member, type Store } from "./types.js";
 
 type MemberRow = {
   id: string;
@@ -61,6 +61,8 @@ export class SupabaseStore implements Store {
       .insert({ email: input.email.trim().toLowerCase(), full_name: input.fullName, status: input.status })
       .select("*")
       .single();
+    // 23505 = unique_violation (contrainte unique sur members.email).
+    if (error?.code === "23505") throw new DuplicateEmailError(input.email);
     if (error) throw error;
     return toMember(data as MemberRow);
   }
@@ -87,5 +89,22 @@ export class SupabaseStore implements Store {
       .eq("coach_id", coachId);
     if (error) throw error;
     return count ?? 0;
+  }
+
+  async hasProcessedEvent(eventId: string) {
+    const { data, error } = await this.db
+      .from("processed_events")
+      .select("event_id")
+      .eq("event_id", eventId)
+      .maybeSingle();
+    if (error) throw error;
+    return data !== null;
+  }
+
+  async markEventProcessed(eventId: string) {
+    const { error } = await this.db
+      .from("processed_events")
+      .upsert({ event_id: eventId }, { onConflict: "event_id", ignoreDuplicates: true });
+    if (error) throw error;
   }
 }

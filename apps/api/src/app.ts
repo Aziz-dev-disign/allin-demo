@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { coachesRoutes } from "./routes/coaches.js";
 import { membersRoutes } from "./routes/members.js";
+import { webhooksRoutes } from "./routes/webhooks.js";
 import type { Store } from "./store/types.js";
 
 export interface AppDeps {
@@ -22,7 +23,7 @@ export function createApp(deps: AppDeps) {
   app.route("/members", membersRoutes(deps.store));
   app.route("/coaches", coachesRoutes(deps.store));
 
-  // TODO(issue #1) : POST /webhooks/payments
+  app.route("/webhooks", webhooksRoutes(deps.store, deps.webhookSecret));
   // TODO(issue #2) : attribution d'un coach après paiement
 
   app.onError((err, c) => {

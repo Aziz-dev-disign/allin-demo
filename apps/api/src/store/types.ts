@@ -20,6 +20,14 @@ export interface Coach {
   active: boolean;
 }
 
+/** Levée par `createMember` quand un membre avec cet email existe déjà. */
+export class DuplicateEmailError extends Error {
+  constructor(email: string) {
+    super(`member with email ${email} already exists`);
+    this.name = "DuplicateEmailError";
+  }
+}
+
 /**
  * Accès aux données. L'API ne parle jamais directement à Supabase :
  * elle passe par cette interface, ce qui permet de tester avec InMemoryStore.
@@ -27,6 +35,7 @@ export interface Coach {
 export interface Store {
   getMember(id: string): Promise<Member | null>;
   getMemberByEmail(email: string): Promise<Member | null>;
+  /** @throws DuplicateEmailError si l'email (insensible à la casse) existe déjà. */
   createMember(input: Pick<Member, "email" | "fullName" | "status">): Promise<Member>;
   updateMember(id: string, patch: Partial<Pick<Member, "status" | "coachId">>): Promise<Member>;
   listCoaches(): Promise<Coach[]>;

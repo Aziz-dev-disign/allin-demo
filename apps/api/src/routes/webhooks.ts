@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import { z } from "zod";
-import type { Store } from "../store/types.js";
+import { DuplicateEmailError, type Store } from "../store/types.js";
 
 const eventSchema = z.object({
   eventId: z.string().min(1),
@@ -12,7 +12,8 @@ const eventSchema = z.object({
 const paymentSucceededSchema = z.object({
   email: z.email(),
   fullName: z.string().min(1),
-  amountCents: z.number().int().nonnegative(),
+  // > 0 : un paiement à 0 n'est pas un paiement. Le min/max exact reste à confirmer (voir PR).
+  amountCents: z.number().int().positive(),
 });
 
 /** Vérifie en temps constant le HMAC-SHA256 hexadécimal du corps brut. */
@@ -54,10 +55,17 @@ export function webhooksRoutes(store: Store, webhookSecret: string) {
       return c.json({ received: true, duplicate: true });
     }
 
-    const member = await store.getMemberByEmail(data.data.email);
+    let member = await store.getMemberByEmail(data.data.email);
     if (!member) {
-      await store.createMember({ email: data.data.email, fullName: data.data.fullName, status: "paid" });
-    } else if (member.status === "pending_payment") {
+      try {
+        await store.createMember({ email: data.data.email, fullName: data.data.fullName, status: "paid" });
+      } catch (err) {
+        if (!(err instanceof DuplicateEmailError)) throw err;
+        // Course : un autre événement a créé ce membre entre-temps. On le relit et on applique la règle normale.
+        member = await store.getMemberByEmail(data.data.email);
+      }
+    }
+    if (member?.status === "pending_payment") {
       // Un membre onboarded/active ne redescend jamais à paid.
       await store.updateMember(member.id, { status: "paid" });
     }

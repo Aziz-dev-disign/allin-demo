@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import { DuplicateEmailError } from "../src/store/types.js";
 import { makeApp, TEST_WEBHOOK_SECRET } from "./helpers.js";
 
 const sign = (body: string, secret = TEST_WEBHOOK_SECRET) =>
@@ -85,6 +86,34 @@ describe("POST /webhooks/payments", () => {
     const res = await postSigned(app, payload({ type: "refund.created" }));
     expect(res.status).toBe(200);
     expect(await store.getMemberByEmail("jeanne@exemple.com")).toBeNull();
+  });
+
+  it.each([0, -100])("400 si le montant est %i (un paiement doit être > 0), rien n'est écrit", async (amountCents) => {
+    const { app, store } = makeApp();
+    const res = await postSigned(
+      app,
+      payload({ data: { email: "Jeanne@Exemple.com", fullName: "Jeanne Tremblay", amountCents } }),
+    );
+    expect(res.status).toBe(400);
+    expect(await store.getMemberByEmail("jeanne@exemple.com")).toBeNull();
+  });
+
+  it("le store refuse deux membres avec le même email (casse ignorée)", async () => {
+    const { store } = makeApp();
+    await store.createMember({ email: "jeanne@exemple.com", fullName: "J", status: "paid" });
+    await expect(
+      store.createMember({ email: "JEANNE@exemple.com", fullName: "J2", status: "paid" }),
+    ).rejects.toBeInstanceOf(DuplicateEmailError);
+  });
+
+  it("deux événements simultanés pour le même email : 200 partout, un seul membre", async () => {
+    const { app, store } = makeApp();
+    const results = await Promise.all([
+      postSigned(app, payload({ eventId: "evt_a" })),
+      postSigned(app, payload({ eventId: "evt_b" })),
+    ]);
+    expect(results.map((r) => r.status)).toEqual([200, 200]);
+    expect(await store.getMemberByEmail("jeanne@exemple.com")).toMatchObject({ status: "paid" });
   });
 
   it.each(["onboarded", "active"] as const)("un membre %s ne redescend jamais à paid", async (status) => {

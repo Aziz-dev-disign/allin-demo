@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Coach, Member, Store } from "./types.js";
+import { DuplicateEmailError, type Coach, type Member, type Store } from "./types.js";
 
 /** Store en mémoire : utilisé par les tests et le développement sans Supabase. */
 export class InMemoryStore implements Store {
@@ -23,9 +23,12 @@ export class InMemoryStore implements Store {
   }
 
   async createMember(input: Pick<Member, "email" | "fullName" | "status">) {
+    const email = input.email.trim().toLowerCase();
+    // Vérification et insertion sans await entre les deux : atomique, comme la contrainte unique SQL.
+    for (const m of this.members.values()) if (m.email === email) throw new DuplicateEmailError(email);
     const member: Member = {
       id: randomUUID(),
-      email: input.email.trim().toLowerCase(),
+      email,
       fullName: input.fullName,
       status: input.status,
       coachId: null,

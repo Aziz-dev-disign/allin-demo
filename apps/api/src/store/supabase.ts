@@ -88,4 +88,21 @@ export class SupabaseStore implements Store {
     if (error) throw error;
     return count ?? 0;
   }
+
+  async hasProcessedEvent(eventId: string) {
+    const { data, error } = await this.db
+      .from("processed_events")
+      .select("event_id")
+      .eq("event_id", eventId)
+      .maybeSingle();
+    if (error) throw error;
+    return data !== null;
+  }
+
+  async markEventProcessed(eventId: string) {
+    const { error } = await this.db
+      .from("processed_events")
+      .upsert({ event_id: eventId }, { onConflict: "event_id", ignoreDuplicates: true });
+    if (error) throw error;
+  }
 }

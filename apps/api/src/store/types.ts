@@ -31,4 +31,8 @@ export interface Store {
   updateMember(id: string, patch: Partial<Pick<Member, "status" | "coachId">>): Promise<Member>;
   listCoaches(): Promise<Coach[]>;
   countMembersByCoach(coachId: string): Promise<number>;
+  /** Idempotence des webhooks : l'événement a-t-il déjà été traité ? */
+  hasProcessedEvent(eventId: string): Promise<boolean>;
+  /** Mémorise un événement traité (sans erreur s'il l'est déjà). */
+  markEventProcessed(eventId: string): Promise<void>;
 }

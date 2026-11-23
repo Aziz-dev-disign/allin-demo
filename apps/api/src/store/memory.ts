@@ -4,6 +4,7 @@ import type { Coach, Member, Store } from "./types.js";
 /** Store en mémoire : utilisé par les tests et le développement sans Supabase. */
 export class InMemoryStore implements Store {
   private members = new Map<string, Member>();
+  private processedEvents = new Set<string>();
   private coaches = new Map<string, Coach>();
 
   constructor(seed: { coaches?: Coach[]; members?: Member[] } = {}) {
@@ -50,5 +51,13 @@ export class InMemoryStore implements Store {
     let n = 0;
     for (const m of this.members.values()) if (m.coachId === coachId) n++;
     return n;
+  }
+
+  async hasProcessedEvent(eventId: string) {
+    return this.processedEvents.has(eventId);
+  }
+
+  async markEventProcessed(eventId: string) {
+    this.processedEvents.add(eventId);
   }
 }
